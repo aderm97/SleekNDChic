@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User (Admin/Staff only)
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  fullName      String?
+  role          Role      @default(STAFF)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+// Categories
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  active    Boolean   @default(true)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// Products
+model Product {
+  id                String          @id @default(cuid())
+  name              String
+  description       String?
+  basePrice         Float
+  sku               String          @unique
+  categoryId        String?
+  category          Category?       @relation(fields: [categoryId], references: [id])
+  lowStockThreshold Int             @default(5)
+  active            Boolean         @default(true)
+  images            ProductImage[]
+  variants          Variant[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model ProductImage {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url           String
+  altText       String?
+  displayOrder  Int      @default(0)
+}
+
+model Variant {
+  id                String              @id @default(cuid())
+  productId         String
+  product           Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size              String?
+  color             String?
+  skuSuffix         String?
+  stockQuantity     Int                 @default(0)
+  active            Boolean             @default(true)
+  orderItems        OrderItem[]
+  inventoryAdjustments InventoryAdjustment[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([productId, size, color])
+}
+
+model InventoryAdjustment {
+  id            String            @id @default(cuid())
+  variantId     String
+  variant       Variant           @relation(fields: [variantId], references: [id])
+  quantityChange Int
+  reason        AdjustmentReason
+  orderId       String?
+  adjustedByUserId String?
+  note          String?
+  createdAt     DateTime          @default(now())
+}
+
+enum AdjustmentReason {
+  ORDER
+  RETURN
+  DAMAGE
+  MANUAL
+  RESTOCK
+}
+
+// Shipping Configuration
+model StateShipping {
+  id             String          @id @default(cuid())
+  stateName      String
+  shippingMethod ShippingMethod
+  price          Float
+  active         Boolean         @default(true)
+
+  @@unique([stateName, shippingMethod])
+}
+
+enum ShippingMethod {
+  AUTHORIZED_CAR_PARK
+  DELIVERY_COMPANY
+}
+
+// Coupons
+model Coupon {
+  id             String         @id @default(cuid())
+  code           String         @unique
+  type           CouponType
+  value          Float
+  minOrderAmount Float          @default(0)
+  usageLimit     Int?
+  usedCount      Int            @default(0)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  active         Boolean        @default(true)
+  orders         Order[]
+  usages         CouponUsage[]
+  createdAt      DateTime       @default(now())
+}
+
+enum CouponType {
+  FIXED
+  PERCENTAGE
+}
+
+model CouponUsage {
+  id        String   @id @default(cuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id])
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  usedAt    DateTime @default(now())
+
+  @@unique([couponId, orderId])
+}
+
+// Orders
+model Order {
+  id                    String        @id @default(cuid())
+  orderNumber           String        @unique
+  channel               OrderChannel  @default(WEBSITE)
+  
+  // Customer Info
+  customerEmail         String
+  customerPhone         String?
+  shippingAddress       String
+  stateName             String?
+  
+  // Financials
+  status                OrderStatus   @default(PENDING_PAYMENT)
+  subtotal              Float
+  tax                   Float         @default(0)
+  shippingCost          Float         @default(0)
+  discountAmount        Float         @default(0)
+  totalAmount           Float
+  
+  // Payment
+  paymentMethod         PaymentMethod
+  paymentStatus         PaymentStatus @default(PENDING)
+  paymentTransactionId  String?
+  
+  // Flags
+  needsShippingReview   Boolean       @default(false)
+  trackingNumber        String?
+  couponId              String?
+  coupon                Coupon?       @relation(fields: [couponId], references: [id])
+  
+  // Relations
+  items                 OrderItem[]
+  couponUsages          CouponUsage[]
+  notifications         NotificationLog[]
+  
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+enum OrderChannel {
+  WEBSITE
+  POS
+  SOCIAL_MEDIA
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  variantId   String
+  variant     Variant  @relation(fields: [variantId], references: [id])
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
+}
+
+// Notifications
+model NotificationLog {
+  id            String            @id @default(cuid())
+  orderId       String?
+  order         Order?            @relation(fields: [orderId], references: [id])
+  recipient     String
+  channel       NotificationChannel
+  template      String
+  status        NotificationStatus
+  content       String?
+  sentAt        DateTime?
+  errorMessage  String?
+  createdAt     DateTime          @default(now())
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// CMS
+model BlogPost {
+  id               String    @id @default(cuid())
+  title            String
+  slug             String    @unique
+  contentHtml      String
+  excerpt          String?
+  featuredImageUrl String?
+  publishedAt      DateTime?
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Page {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  contentHtml String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CarouselItem {
+  id            String   @id @default(cuid())
+  imageUrl      String
+  targetUrl     String?
+  altText       String?
+  displayOrder  Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

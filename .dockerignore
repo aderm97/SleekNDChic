@@ -1,0 +1,58 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Certbot and nginx local configs (host-side mounts)
+certbot
+nginx
+
+# Documentation
+*.md
+DEPLOYMENT.md
+LOCAL_SETUP.md
+PLAN.md
+
+# Misc
+*.pdf
+*.jpeg
+*.jpg
+*.png
+scripts
