@@ -3,9 +3,20 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-echo "=== SleekNDChic Deployment ==="
-echo "Building and starting services..."
+# Build frontend assets
+echo "=== Building Frontend ==="
+if [ -d "apps/web" ]; then
+    echo "Installing frontend dependencies..."
+    cd apps/web
+    npm ci
+    echo "Building frontend production bundle..."
+    npm run build
+    cd ../..
+else
+    echo "Warning: apps/web directory not found."
+fi
 
+echo "=== Building and starting services ==="
 docker compose up --build -d
 
 echo ""

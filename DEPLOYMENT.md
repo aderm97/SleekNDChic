@@ -175,3 +175,100 @@ npx prisma migrate deploy
 pm2 restart sleekndchic-api
 ```
 *(Frontend updates automatically via Vercel when you push to GitHub).*
+
+---
+
+## 3. AWS EC2 (Unified Docker Compose Deployment)
+
+This section outlines deploying the entire stack (PostgreSQL, Redis, API, and React Frontend served by Nginx) onto a single AWS EC2 instance. This is the most cost-effective self-hosted approach.
+
+### 3.1 Prerequisites & AWS Configuration
+
+1. **Launch an EC2 Instance:**
+   - **OS**: Ubuntu 22.04 LTS or 24.04 LTS (x86_64).
+   - **Instance Type**: `t3.small` (recommended, 2GB RAM). *Note: `t3.micro` may run out of memory during frontend build compilation unless a swap file is added.*
+   - **Storage**: 15GB+ gp3 SSD.
+2. **Configure Security Group (Firewall):**
+   Add inbound rules:
+   - **SSH** (Port 22): Restrict to your IP for safety.
+   - **HTTP** (Port 80): Anywhere (`0.0.0.0/0` and `::/0`).
+   - **HTTPS** (Port 443): Anywhere (`0.0.0.0/0` and `::/0`).
+3. **Configure DNS:**
+   - Go to your DNS provider (e.g., AWS Route 53, Namecheap, GoDaddy).
+   - Add an **A Record** pointing `yourdomain.com` (and `www.yourdomain.com`) to the **Elastic IP** of your EC2 instance.
+
+---
+
+### 3.2 Server Initialization
+
+1. SSH into your EC2 instance:
+   ```bash
+   ssh -i your-key.pem ubuntu@your-ec2-public-ip
+   ```
+2. Clone your repository:
+   ```bash
+   git clone https://github.com/your-username/SleekNDChic.git
+   cd SleekNDChic/SleekNDChic
+   ```
+3. Run the automated setup script to install Docker, Docker Compose, Git, and Node.js:
+   ```bash
+   chmod +x scripts/aws-setup.sh
+   ./scripts/aws-setup.sh
+   ```
+4. Log out and SSH back in, or run `newgrp docker` to apply docker group permissions.
+
+---
+
+### 3.3 Configure Environment Variables
+
+Create a root `.env` file for Docker Compose and the API:
+```bash
+nano .env
+```
+Copy and fill out the values from `.env.production.template`.
+
+Ensure the frontend variables in `apps/web/.env.production` are also set. Since we are serving both the frontend and API from the same domain:
+```ini
+VITE_API_URL="/api/v1"
+VITE_PAYSTACK_PUBLIC_KEY="pk_live_..."
+VITE_APP_NAME="SleekNDChic"
+VITE_APP_URL="https://yourdomain.com"
+```
+
+---
+
+### 3.4 Deploy the Application
+
+Run the deployment script to build the frontend and launch the containers:
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+At this stage, the API and frontend will be running over HTTP. You can verify this by checking if you can load the app at `http://your-ec2-public-ip` or `http://yourdomain.com`.
+
+---
+
+### 3.5 Set Up SSL/HTTPS (Certbot)
+
+1. Obtain a Let's Encrypt certificate using the Certbot container:
+   ```bash
+   docker compose run --rm certbot certonly --webroot --webroot-path=/var/www/certbot -d yourdomain.com -d www.yourdomain.com --email admin@yourdomain.com --agree-tos --no-eff-email
+   ```
+2. Once the certificates are generated successfully, update Nginx to use them:
+   - Edit the production SSL configuration template:
+     ```bash
+     nano nginx/sites-enabled/production-ssl.conf.template
+     ```
+     Replace all occurrences of `yourdomain.com` with your actual domain name.
+   - Replace the default HTTP configuration with the SSL configuration:
+     ```bash
+     cp nginx/sites-enabled/production-ssl.conf.template nginx/sites-enabled/default.conf
+     ```
+3. Reload Nginx to apply HTTPS:
+   ```bash
+   docker compose exec nginx nginx -s reload
+   ```
+
+Your site is now fully secure and running at `https://yourdomain.com`. Certbot will automatically attempt to renew the certificate every 12 hours.
+
